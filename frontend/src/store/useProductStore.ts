@@ -1,41 +1,55 @@
 import { create } from "zustand";
 import axios from "axios";
 import toast from "react-hot-toast";
+import { Product } from "../types/product";
 
 // base url will be dynamic depending on the environment
 const BASE_URL =
   import.meta.env.MODE === "development" ? "http://localhost:3000" : "";
 
-export const useProductStore = create((set, get) => ({
-  // products state
+interface ProductStore {
+  products: Product[];
+  loading: boolean;
+  error: string | null;
+  currentProduct: Product | null;
+  formData: Omit<Product, "id">;
+  setFormData: (formData: Omit<Product, "id">) => void;
+  resetForm: () => void;
+  addProduct: (e: React.FormEvent) => Promise<void>;
+  fetchProducts: () => Promise<void>;
+  deleteProduct: (id: string) => Promise<void>;
+  fetchProduct: (id: string) => Promise<void>;
+  updateProduct: (id: string) => Promise<void>;
+}
+
+export const useProductStore = create<ProductStore>((set, get) => ({
   products: [],
   loading: false,
   error: null,
   currentProduct: null,
-
-  // form state
   formData: {
     name: "",
-    price: "",
+    price: 0,
     image: "",
   },
 
   setFormData: (formData) => set({ formData }),
-  resetForm: () => set({ formData: { name: "", price: "", image: "" } }),
+  resetForm: () => set({ formData: { name: "", price: 0, image: "" } }),
 
   addProduct: async (e) => {
     e.preventDefault();
     set({ loading: true });
-
     try {
       const { formData } = get();
       await axios.post(`${BASE_URL}/api/products`, formData);
       await get().fetchProducts();
       get().resetForm();
       toast.success("Product added successfully");
-      document.getElementById("add_product_modal").close();
+      (
+        document.getElementById("add_product_modal") as HTMLDialogElement
+      )?.close();
     } catch (error) {
-      console.log("Error in addProduct function", error);
+      console.error("Error in addProduct function", error);
       toast.error("Something went wrong");
     } finally {
       set({ loading: false });
@@ -47,10 +61,14 @@ export const useProductStore = create((set, get) => ({
     try {
       const response = await axios.get(`${BASE_URL}/api/products`);
       set({ products: response.data.data, error: null });
-    } catch (err) {
-      if (err.status == 429)
-        set({ error: "Rate limit exceeded", products: [] });
-      else set({ error: "Something went wrong", products: [] });
+    } catch (err: unknown) {
+      set({
+        error:
+          err instanceof Error && "status" in err && err.status === 429
+            ? "Rate limit exceeded"
+            : "Something went wrong",
+        products: [],
+      });
     } finally {
       set({ loading: false });
     }
@@ -66,7 +84,7 @@ export const useProductStore = create((set, get) => ({
       }));
       toast.success("Product deleted successfully");
     } catch (error) {
-      console.log("Error in deleteProduct function", error);
+      console.error("Error in deleteProduct function", error);
       toast.error("Something went wrong");
     } finally {
       set({ loading: false });
@@ -79,16 +97,17 @@ export const useProductStore = create((set, get) => ({
       const response = await axios.get(`${BASE_URL}/api/products/${id}`);
       set({
         currentProduct: response.data.data,
-        formData: response.data.data, // pre-fill form with current product data
+        formData: response.data.data,
         error: null,
       });
     } catch (error) {
-      console.log("Error in fetchProduct function", error);
+      console.error("Error in fetchProduct function", error);
       set({ error: "Something went wrong", currentProduct: null });
     } finally {
       set({ loading: false });
     }
   },
+
   updateProduct: async (id) => {
     set({ loading: true });
     try {
@@ -100,8 +119,8 @@ export const useProductStore = create((set, get) => ({
       set({ currentProduct: response.data.data });
       toast.success("Product updated successfully");
     } catch (error) {
+      console.error("Error in updateProduct function", error);
       toast.error("Something went wrong");
-      console.log("Error in updateProduct function", error);
     } finally {
       set({ loading: false });
     }
